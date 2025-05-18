@@ -1,0 +1,3 @@
+output/*
+openai_auth_key.txt
+__pycache__/*
