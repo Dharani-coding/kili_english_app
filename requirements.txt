@@ -1,3 +1,7 @@
-openai
-sqlite3
 PyQt5
+qasync
+sounddevice
+numpy
+scipy
+pydub
+openai
