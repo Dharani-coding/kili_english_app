@@ -1,3 +1,4 @@
 output/*
 openai_auth_key.txt
 __pycache__/*
+database/*

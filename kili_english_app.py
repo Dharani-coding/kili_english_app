@@ -7,8 +7,17 @@ from pydub import AudioSegment
 import tempfile
 import os
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
-    QLabel, QTextEdit, QLineEdit, QTabWidget
+    QApplication,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QComboBox,
+    QLabel,
+    QTextEdit,
+    QLineEdit,
+    QTabWidget,
+    QMessageBox,
 )
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -18,6 +27,7 @@ import json
 
 from qasync import QEventLoop
 import gen_ai_apis
+import database_manager
 
 auth_key = "openai_auth_key.txt"
 system_audio = "output/system_audio.mp3"
@@ -26,6 +36,7 @@ feedback_json = "output/feedback.json"
 quiz_json = "output/quiz.json"
 conversation_txt = "output/conversation.txt"
 db_file = "database/english_learnings.db"
+
 
 # Recording Thread
 class RecorderThread(QThread):
@@ -39,7 +50,9 @@ class RecorderThread(QThread):
 
     def run(self):
         self.running = True
-        with sd.InputStream(samplerate=self.samplerate, channels=1, callback=self.callback):
+        with sd.InputStream(
+            samplerate=self.samplerate, channels=1, callback=self.callback
+        ):
             while self.running:
                 sd.sleep(100)
         self.finished.emit()
@@ -73,6 +86,7 @@ class EnglishTutorApp(QWidget):
         self.showing_question = True
         self.system_audio_enabled = True
         self.init_ui()
+        self.db = database_manager.DBManager(db_file)
 
     def init_ui(self):
         main_layout = QVBoxLayout()
@@ -87,7 +101,9 @@ class EnglishTutorApp(QWidget):
         self.toggle_audio = QPushButton("🔊 System Audio")
         self.toggle_audio.setCheckable(True)
         self.toggle_audio.setChecked(True)
-        self.toggle_audio.toggled.connect(lambda checked: setattr(self, "system_audio_enabled", checked))
+        self.toggle_audio.toggled.connect(
+            lambda checked: setattr(self, "system_audio_enabled", checked)
+        )
 
         # self.toggle_hints = QPushButton("💡 Hints")
         # self.toggle_hints.setCheckable(True)
@@ -97,7 +113,9 @@ class EnglishTutorApp(QWidget):
         chat_layout.addLayout(toggle_layout)
 
         self.chat_display = QTextEdit(readOnly=True)
-        self.chat_display.setStyleSheet("font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;")
+        self.chat_display.setStyleSheet(
+            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
+        )
         chat_layout.addWidget(self.chat_display)
 
         # Chat buttons
@@ -117,7 +135,9 @@ class EnglishTutorApp(QWidget):
         msg_layout = QHBoxLayout()
         self.msg_input = QLineEdit()
         self.send_btn = QPushButton("Send")
-        self.send_btn.clicked.connect(lambda: asyncio.create_task(self.send_text_message()))
+        self.send_btn.clicked.connect(
+            lambda: asyncio.create_task(self.send_text_message())
+        )
         msg_layout.addWidget(self.msg_input)
         msg_layout.addWidget(self.send_btn)
 
@@ -149,30 +169,66 @@ class EnglishTutorApp(QWidget):
         self.memory_dropdown = QComboBox()
         self.memory_dropdown.addItems(["New Word", "New Phrase"])
         self.remember_btn = QPushButton("Remember")
+        self.remember_btn.clicked.connect(self.remember_input)
         memory_layout.addWidget(self.memory_input)
         memory_layout.addWidget(self.memory_dropdown)
         memory_layout.addWidget(self.remember_btn)
 
-        # Three section text areas with labels
+        # === Grammar section ===
+        grammar_layout = QHBoxLayout()
+        grammar_label = QLabel("📝 Grammar")
         self.grammar_text = QTextEdit(readOnly=True)
-        self.grammar_text.setStyleSheet("font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;")
+        self.grammar_text.setStyleSheet(
+            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
+        )
+        self.grammar_remember_btn = QPushButton("Remember Grammar")
+        self.grammar_remember_btn.clicked.connect(self.remember_grammar)
 
+        grammar_layout.addWidget(grammar_label)
+        grammar_layout.addStretch()
+        grammar_layout.addWidget(self.grammar_remember_btn)
+
+        # === Vocabulary section ===
+        vocab_layout = QHBoxLayout()
+        vocab_label = QLabel("📚 Vocabulary")
         self.vocab_text = QTextEdit(readOnly=True)
-        self.vocab_text.setStyleSheet("font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;")
+        self.vocab_text.setStyleSheet(
+            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
+        )
+        self.vocab_remember_btn = QPushButton("Remember Vocabulary")
+        self.vocab_remember_btn.clicked.connect(self.remember_vocabulary)
 
+        vocab_layout.addWidget(vocab_label)
+        vocab_layout.addStretch()
+        vocab_layout.addWidget(self.vocab_remember_btn)
+
+        # === Phrases section ===
+        phrase_layout = QHBoxLayout()
+        phrase_label = QLabel("💬 Phrases")
         self.phrase_text = QTextEdit(readOnly=True)
-        self.phrase_text.setStyleSheet("font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;")
+        self.phrase_text.setStyleSheet(
+            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
+        )
+        self.phrase_remember_btn = QPushButton("Remember Phrases")
+        self.phrase_remember_btn.clicked.connect(self.remember_phrases)
 
-        # Add all widgets to layout
+        phrase_layout.addWidget(phrase_label)
+        phrase_layout.addStretch()
+        phrase_layout.addWidget(self.phrase_remember_btn)
+
+        self.grammar_remember_btn.setEnabled(False)
+        self.vocab_remember_btn.setEnabled(False)
+        self.phrase_remember_btn.setEnabled(False)
+
         report_layout.addLayout(report_header)
-        report_layout.addWidget(QLabel("📝 Grammar"))
+        report_layout.addLayout(grammar_layout)
         report_layout.addWidget(self.grammar_text)
-        report_layout.addWidget(QLabel("📚 Vocabulary"))
+        report_layout.addLayout(vocab_layout)
         report_layout.addWidget(self.vocab_text)
-        report_layout.addWidget(QLabel("💬 Phrases"))
+        report_layout.addLayout(phrase_layout)
         report_layout.addWidget(self.phrase_text)
         report_layout.addLayout(memory_layout)
-        
+
         report_tab.setLayout(report_layout)
 
         # === Tab 3: Quiz ===
@@ -192,7 +248,9 @@ class EnglishTutorApp(QWidget):
         quiz_header.addWidget(self.start_quiz_btn)
 
         self.quiz_display = QTextEdit(readOnly=True)
-        self.quiz_display.setStyleSheet("font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;")
+        self.quiz_display.setStyleSheet(
+            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
+        )
 
         nav_layout = QHBoxLayout()
         self.prev_btn = QPushButton("Previous")
@@ -229,7 +287,9 @@ class EnglishTutorApp(QWidget):
     def start_recording(self):
         print("[System] Recording started...")
         self.recorder_thread = RecorderThread()
-        self.recorder_thread.finished.connect(lambda: asyncio.create_task(self.on_recording_finished()))
+        self.recorder_thread.finished.connect(
+            lambda: asyncio.create_task(self.on_recording_finished())
+        )
         self.recorder_thread.start()
 
     def stop_recording(self):
@@ -252,7 +312,9 @@ class EnglishTutorApp(QWidget):
         self.del_audio()
         self.display_message(user_text, "You")
 
-        system_reply = await asyncio.to_thread(gen_ai_apis.conversation_builder, user_text)
+        system_reply = await asyncio.to_thread(
+            gen_ai_apis.conversation_builder, user_text
+        )
         if self.system_audio_enabled:
             await asyncio.to_thread(gen_ai_apis.text_to_speech, system_reply)
             await asyncio.to_thread(self.play_audio)
@@ -270,16 +332,16 @@ class EnglishTutorApp(QWidget):
             sender = "🤖" if sender == "System" else "👩🏽"
             self.chat_display.append(f"{sender}: {text}\n")
         self.msg_input.clear()
-    
+
     async def send_text_message(self):
         user_text = self.msg_input.text()
         await self.send_and_receive_response(user_text)
-
 
     def get_report(self):
         gen_ai_apis.conversation_corrector()
 
     def show_feedback(self):
+        global feedback
         with open(feedback_json, "r") as file:
             feedback = json.load(file)
 
@@ -309,10 +371,72 @@ class EnglishTutorApp(QWidget):
         self.vocab_text.setHtml(vocab_html)
         self.phrase_text.setHtml(phrase_html)
 
+        self.grammar_remember_btn.setEnabled(True)
+        self.vocab_remember_btn.setEnabled(True)
+        self.phrase_remember_btn.setEnabled(True)
+
+    def remember_grammar(self):
+        try:
+            for mistake, correction in feedback.get("grammar_mistakes", {}).items():
+                self.db.add_grammar_mistake(mistake, correction)
+            print("Grammar mistakes remembered.")
+        except Exception as e:
+            print("Error remembering grammar:", e)
+
+    def remember_vocabulary(self):
+        try:
+            for word, suggestion in feedback.get("better_vocabulary", {}).items():
+                self.db.add_better_vocabulary(word, suggestion)
+            print("Vocabulary remembered.")
+        except Exception as e:
+            print("Error remembering vocabulary:", e)
+
+    def remember_phrases(self):
+        try:
+            for phrase, improved in feedback.get("better_phrases", {}).items():
+                self.db.add_better_phrase(phrase, improved)
+            print("Phrases remembered.")
+        except Exception as e:
+            print("Error remembering phrases:", e)
+
+    def remember_input(self):
+        text = self.memory_input.text().strip()
+        category = self.memory_dropdown.currentText()
+
+        if not text:
+            QMessageBox.warning(
+                self, "Empty Input", "Please enter a word or phrase to remember."
+            )
+            return
+
+        try:
+            if category == "New Word":
+                self.db.add_new_word(text)
+            elif category == "New Phrase":
+                self.db.add_new_phrase(text)
+            else:
+                QMessageBox.warning(
+                    self, "Invalid Selection", f"Unsupported category: {category}"
+                )
+                return
+            print(f"{category} remembered.")
+            self.memory_input.clear()
+
+        except Exception as e:
+            print(f"Error remembering input: {e}")
+            QMessageBox.critical(
+                self, "Error", "Failed to remember input. Check logs for details."
+            )
+
     def clear_report(self):
+        global feedback
+        feedback = None
         self.grammar_text.clear()
         self.vocab_text.clear()
         self.phrase_text.clear()
+        self.grammar_remember_btn.setEnabled(False)
+        self.vocab_remember_btn.setEnabled(False)
+        self.phrase_remember_btn.setEnabled(False)
 
     def generate_quiz(self):
         gen_ai_apis.create_quiz()
@@ -340,7 +464,9 @@ class EnglishTutorApp(QWidget):
         if self.showing_question:
             self.quiz_display.setHtml(f"<b>Question:</b><br>{q}")
         else:
-            self.quiz_display.setHtml(f"<b>Question:</b><br>{q}<br><br><b>Answer:</b><br>{a}")
+            self.quiz_display.setHtml(
+                f"<b>Question:</b><br>{q}<br><br><b>Answer:</b><br>{a}"
+            )
 
     def next_flashcard(self):
         if self.showing_question:
@@ -349,7 +475,9 @@ class EnglishTutorApp(QWidget):
             self.showing_question = True
             self.current_index += 1
             if self.current_index >= len(self.qa_pairs):
-                self.quiz_display.setHtml('<div style="color: green;"><b>🎉 End of Quiz!</b></div>')
+                self.quiz_display.setHtml(
+                    '<div style="color: green;"><b>🎉 End of Quiz!</b></div>'
+                )
                 self.next_btn.setEnabled(False)
                 return
         self.prev_btn.setEnabled(self.current_index > 0)
@@ -365,7 +493,7 @@ class EnglishTutorApp(QWidget):
 
 
 # Run app with qasync event loop
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon("images/kili_logo.png"))
     loop = QEventLoop(app)
@@ -374,7 +502,9 @@ if __name__ == '__main__':
     window = EnglishTutorApp()
     window.resize(600, 700)
     window.show()
-    gen_ai_apis.init_openai_client(auth_key, system_audio, user_audio, feedback_json, quiz_json, conversation_txt)
+    gen_ai_apis.init_openai_client(
+        auth_key, system_audio, user_audio, feedback_json, quiz_json, conversation_txt
+    )
 
     with loop:
         loop.run_forever()

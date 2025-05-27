@@ -1,189 +1,189 @@
 import sqlite3
-import json
-import os
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
+import random
+
+RECALL_COUNT = 3
+
 
 class DBManager:
-    def __init__(self, db_path: str = DB_FILE):
-        self.db_path = db_path
-        self.conn = sqlite3.connect(self.db_path)
-        self._create_table()
+    def __init__(self, db_path="english_learning.db"):
+        self.conn = sqlite3.connect(db_path)
+        self._create_tables()
 
-    def _create_table(self):
-        query = """
-        CREATE TABLE IF NOT EXISTS English_Learnings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            grammar_mistakes TEXT,
-            better_vocabulary TEXT,
-            better_phrases TEXT,
-            new_vocabulary TEXT,
-            new_phrases TEXT,
-            learned_date TEXT,
-            recalled_count INTEGER DEFAULT 0,
-            note TEXT
-        );
-        """
-        self.conn.execute(query)
-        self.conn.commit()
-
-    def add_learning_entry(
-        self,
-        feedback_json: Dict[str, Any],
-        new_vocab: List[str],
-        new_phrases: List[str],
-        note: Optional[str] = None
-    ) -> bool:
-        if not (feedback_json or new_vocab or new_phrases):
-            return False  # Don't insert empty learnings
-
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT INTO English_Learnings (
-                grammar_mistakes,
-                better_vocabulary,
-                better_phrases,
-                new_vocabulary,
-                new_phrases,
-                learned_date,
-                recalled_count,
-                note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            json.dumps(feedback_json.get("grammar_mistakes", {})),
-            json.dumps(feedback_json.get("better_vocabulary", {})),
-            json.dumps(feedback_json.get("better_phrases", {})),
-            json.dumps(new_vocab),
-            json.dumps(new_phrases),
-            datetime.today().strftime('%Y-%m-%d'),
-            0,
-            note
-        ))
-        self.conn.commit()
-        return True
-
-    def get_random_learnings(self, learning_type: str = "", limit: int = 5) -> List[Dict[str, Any]]:
-        query = """
-        SELECT * FROM English_Learnings
-        WHERE recalled_count < 2
-        """
-        
-        params = []
-        
-        if learning_type:
-            if learning_type == "grammar":
-                query += " AND grammar_mistakes != '{}'"
-            elif learning_type == "vocabulary":
-                query += " AND (better_vocabulary != '{}' OR new_vocabulary != '[]')"
-            elif learning_type == "phrases":
-                query += " AND (better_phrases != '{}' OR new_phrases != '[]')"
-        
-        query += " ORDER BY RANDOM() LIMIT ?"
-        params.append(limit)
-        
-        cursor = self.conn.execute(query, params)
-        rows = cursor.fetchall()
-        return [self._format_entry(row) for row in rows]
-
-    def _format_entry(self, row) -> Dict[str, Any]:
-        return {
-            "id": row[0],
-            "grammar_mistakes": json.loads(row[1] or '{}'),
-            "better_vocabulary": json.loads(row[2] or '{}'),
-            "better_phrases": json.loads(row[3] or '{}'),
-            "new_vocabulary": json.loads(row[4] or '[]'),
-            "new_phrases": json.loads(row[5] or '[]'),
-            "learned_date": row[6],
-            "recalled_count": row[7],
-            "note": row[8]
+    def _create_tables(self):
+        tables = {
+            "GrammarMistakes": "mistake TEXT UNIQUE, correction TEXT",
+            "BetterPhrases": "original TEXT UNIQUE, better TEXT",
+            "BetterVocabulary": "word TEXT UNIQUE, better_word TEXT",
+            "NewWords": "word TEXT UNIQUE",
+            "NewPhrases": "phrase TEXT UNIQUE",
         }
 
-    def mark_as_recalled(self, id: int):
-        self.conn.execute("""
-            UPDATE English_Learnings
-            SET recalled_count = recalled_count + 1
-            WHERE id = ?
-        """, (id,))
+        for table, fields in tables.items():
+            query = f"""
+            CREATE TABLE IF NOT EXISTS {table} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                {fields},
+                learned_date TEXT,
+                recalled_count INTEGER DEFAULT 0,
+                note TEXT
+            );
+            """
+            self.conn.execute(query)
         self.conn.commit()
+
+    def _add_entry(
+        self, table: str, data: Dict[str, str], note: Optional[str] = None
+    ) -> bool:
+        keys = ", ".join(data.keys()) + ", learned_date, note"
+        placeholders = ", ".join("?" for _ in data) + ", ?, ?"
+        values = list(data.values()) + [datetime.today().strftime("%Y-%m-%d"), note]
+
+        try:
+            self.conn.execute(
+                f"INSERT INTO {table} ({keys}) VALUES ({placeholders})", values
+            )
+            self.conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def get_random_from_tables(
+        self, tables: List[str], total_limit: int = 5
+    ) -> List[Dict]:
+        """
+        Retrieves a combined list of random entries from multiple tables.
+        It evenly distributes `total_limit` across the given tables and
+        fetches entries where recalled_count < RECALL_COUNT.
+        """
+        if not tables:
+            return []
+
+        results = []
+        per_table_limit = max(1, total_limit // len(tables))
+
+        for table in tables:
+            cursor = self.conn.execute(
+                f"SELECT * FROM {table} WHERE recalled_count < {RECALL_COUNT} ORDER BY RANDOM() LIMIT ?",
+                (per_table_limit,),
+            )
+            columns = [desc[0] for desc in cursor.description]
+            entries = cursor.fetchall()
+
+            for entry in entries:
+                self._increment_recall_count(table, entry[0])
+                record = dict(zip(columns, entry))
+                record["table"] = table  # Optionally tag with table name
+                results.append(record)
+
+        # If we got fewer results than total_limit, pad with additional randoms
+        if len(results) < total_limit:
+            random.shuffle(results)
+        return results[:total_limit]
+
+    def add_grammar_mistake(
+        self, mistake: str, correction: str, note: Optional[str] = None
+    ) -> bool:
+        return self._add_entry(
+            "GrammarMistakes", {"mistake": mistake, "correction": correction}, note
+        )
+
+    def add_better_phrase(
+        self, original: str, better: str, note: Optional[str] = None
+    ) -> bool:
+        return self._add_entry(
+            "BetterPhrases", {"original": original, "better": better}, note
+        )
+
+    def add_better_vocabulary(
+        self, word: str, better_word: str, note: Optional[str] = None
+    ) -> bool:
+        return self._add_entry(
+            "BetterVocabulary", {"word": word, "better_word": better_word}, note
+        )
+
+    def add_new_word(self, word: str, note: Optional[str] = None) -> bool:
+        return self._add_entry("NewWords", {"word": word}, note)
+
+    def add_new_phrase(self, phrase: str, note: Optional[str] = None) -> bool:
+        return self._add_entry("NewPhrases", {"phrase": phrase}, note)
+
+    def _increment_recall_count(self, table: str, entry_id: int):
+        self.conn.execute(
+            f"UPDATE {table} SET recalled_count = recalled_count + 1 WHERE id = ?",
+            (entry_id,),
+        )
+        self.conn.commit()
+
+    def _get_random_entries(self, table: str, limit: int = 5) -> List[Dict[str, str]]:
+        cursor = self.conn.execute(
+            f"SELECT * FROM {table} WHERE recalled_count < {RECALL_COUNT} ORDER BY RANDOM() LIMIT ?",
+            (limit,),
+        )
+        columns = [description[0] for description in cursor.description]
+        results = []
+        for row in cursor.fetchall():
+            self._increment_recall_count(table, row[0])
+            results.append(dict(zip(columns, row)))
+        return results
+
+    def get_random_grammar_mistakes(self, limit: int = 5) -> List[Dict]:
+        return self._get_random_entries("GrammarMistakes", limit)
+
+    def get_random_better_phrases(self, limit: int = 5) -> List[Dict]:
+        return self._get_random_entries("BetterPhrases", limit)
+
+    def get_random_better_vocabulary(self, limit: int = 5) -> List[Dict]:
+        return self._get_random_entries("BetterVocabulary", limit)
+
+    def get_random_new_words(self, limit: int = 5) -> List[Dict]:
+        return self._get_random_entries("NewWords", limit)
+
+    def get_random_new_phrases(self, limit: int = 5) -> List[Dict]:
+        return self._get_random_entries("NewPhrases", limit)
 
     def close(self):
         self.conn.close()
 
 
 if __name__ == "__main__":
-        # Initialize the database manager
     db = DBManager()
 
-    # Example input data
-    feedback_json = {
-        "grammar_mistakes": {
-            "He don't know the answer.": "He doesn't know the answer."
-        },
-        "better_vocabulary": {
-            "very big": "enormous"
-        },
-        "better_phrases": {
-            "I am going to sleep now.": "I'm heading to bed now."
-        }
-    }
+    db.add_grammar_mistake("He don't like it", "He doesn't like it", "Common mistake")
+    db.add_better_phrase(
+        "I'm going to sleep now", "I'm heading to bed", "Natural phrasing"
+    )
+    db.add_better_vocabulary("very big", "enormous", "Advanced vocab")
+    db.add_new_word("nitty-gritty", "Heard it in a podcast")
+    db.add_new_phrase("looked down upon", "From an article")
 
-    new_vocab = ["nitty-gritty"]
-    new_phrases = ["looked down upon"]
+    # print("\nGrammar Mistakes:")
+    # for e in db.get_random_grammar_mistakes():
+    #     print(e)
 
-    # 1. Adding a learning entry
-    success = db.add_learning_entry(
-        feedback_json=feedback_json,
-        new_vocab=[],
-        new_phrases=[],
-        note="First example entry"
+    # print("\nBetter Phrases:")
+    # for e in db.get_random_better_phrases():
+    #     print(e)
+
+    # print("\nBetter Vocabulary:")
+    # for e in db.get_random_better_vocabulary():
+    #     print(e)
+
+    # print("\nNew Words:")
+    # for e in db.get_random_new_words():
+    #     print(e)
+
+    # print("\nNew Phrases:")
+    # for e in db.get_random_new_phrases():
+    #     print(e)
+
+    print("\nRandom Mix from Multiple Tables:")
+    mixed = db.get_random_from_tables(
+        ["GrammarMistakes", "BetterPhrases", "NewWords"], total_limit=3
     )
 
-    if success:
-        print("Successfully added learning entry!")
-    else:
-        print("Failed to add entry (possibly duplicate)")
+    for item in mixed:
+        print(f"[{item['table']}] {item}\n")
 
-    success = db.add_learning_entry(
-        feedback_json={},
-        new_vocab=[],
-        new_phrases=new_phrases,
-        note="2 example entry"
-    )
-
-    success = db.add_learning_entry(
-        feedback_json={},
-        new_vocab=new_vocab,
-        new_phrases=[],
-        note="3 example entry"
-    )
-
-    # 2. Retrieving random learnings by type
-    print("\nGetting grammar learnings:")
-    grammar_learnings = db.get_random_learnings(learning_type="grammar", limit=2)
-    for learning in grammar_learnings:
-        print(f"- {learning['grammar_mistakes']}")
-
-    print("\nGetting vocabulary learnings:")
-    vocab_learnings = db.get_random_learnings(learning_type="vocabulary", limit=2)
-    for learning in vocab_learnings:
-        print(f"- {learning['better_vocabulary']} or {learning['new_vocabulary']}")
-
-    print("\nGetting phrase learnings:")
-    phrase_learnings = db.get_random_learnings(learning_type="phrases", limit=2)
-    for learning in phrase_learnings:
-        print(f"- {learning['better_phrases']} or {learning['new_phrases']}")
-
-    # 3. Marking an entry as recalled
-    if grammar_learnings:
-        first_id = grammar_learnings[0]['id']
-        db.mark_as_recalled(first_id)
-        print(f"\nMarked entry {first_id} as recalled")
-
-    # 4. Getting all learnings (no type filter)
-    print("\nGetting all learnings:")
-    all_learnings = db.get_random_learnings(limit=2)
-    for learning in all_learnings:
-        print(learning)
-
-    # Close the database connection when done
     db.close()
