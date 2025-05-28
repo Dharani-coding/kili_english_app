@@ -35,26 +35,69 @@ def init_openai_client(auth_key_val, system_audio_val, user_audio_val, feedback_
     client = openai.OpenAI(api_key=key)
 
 
-def create_quiz():
+def create_quiz(json_file):
     """
     Generates a short grammar and phrasing quiz from feedback JSON content and saves it to a file.
     """
-    with open(feedback_json, "r") as file:
+    with open(json_file, "r") as file:
         data = json.load(file)
 
     prompt = f"""
-    You are a helpful English tutor. 
-    Using the following list of grammar mistakes and corrected phrases, create short one-line quiz questions. 
-    Each question should ask the user to choose or correct a phrase to avoid a past mistake. Then provide the correct answer.
-    Provide questions such a way to see if I am making use of better pharses.
+    You are an English tutor AI.
+    Your task is to generate short quiz-style questions (1-3 lines) using the provided categories: grammar mistakes, better vocabulary, better phrases, new words, and new phrases.
+
+    Goal:
+    Help the learner recall and apply their previous mistakes and improved expressions through realistic, varied questions — not just recognize them.
+
+    Instructions:
+
+    Use varied formats like:
+
+    Multiple choice
+    Fill in the blank
+    Sentence correction
+
+    For Grammar Mistakes:
+    Present the incorrect sentence.
+    Ask the learner to correct it.
+
+    For Better Vocabulary & Better Phrases:
+    Create a short real-life context or conversational sentence.
+    Subtly suggest a need for a stronger or more natural expression.
+    Do NOT reveal the improved version in the question.
+    Present example usage of the phrase or Vocabulary in 1-3 whole sentences
+
+    For New Words and New Phrases:
+    Present a situation where the word or phrase could be used.
+    Ask the learner to guess or recall it based on the tone, meaning, or context.
+    Present example usage of the phrase or word in 1-3 whole sentences
+
+    Tone and Context Sensitivity:
+    Match the tone of the original sentence.
+    If the original was casual, don't suggest overly formal replacements.
+    If the original was formal or professional, suggest appropriate polished alternatives.
+    Ensure that improvements feel natural and contextually appropriate.
+
+    Output Format for each quiz item:
+
+    Q: [Your quiz question here]
+    A: [Correct answer here]
 
     Examples:
-    Q: Which is correct? "I taked" or "I took"?  
-    A: I took.
 
-    Q: Fix this sentence: "I not even start."  
+    Q: Which is correct? "I am in the office" or "I am at the office"?
+    A: I am in the office.
+
+    Q: Fix this sentence: "I not even start."
     A: I haven't even started.
 
+    Q: "I'm willing to work to a great extent." — What idiom would elevate this line?
+    A: Go above and beyond.
+
+    Q: In a formal email, which sounds better? "I want to talk to you" or "I would like to speak with you"?
+    A: I would like to speak with you.
+
+    Now generate quiz questions per item in each section using the structure above.
 
     Grammar Mistakes:
     {"\n".join(data["grammar_mistakes"])}
@@ -65,7 +108,11 @@ def create_quiz():
     Better vocabulary:
     {"\n".join(data["better_vocabulary"])}
 
-    Generate similar quiz questions and answers for each item
+    New words learnt:
+    {"\n".join(data.get("new_words", {}))}
+
+    New phrases learnt:
+    {"\n".join(data.get("new_phrases", {}))}
     """
 
     response = client.chat.completions.create(

@@ -28,11 +28,13 @@ import json
 from qasync import QEventLoop
 import gen_ai_apis
 import database_manager
+import helper
 
 auth_key = "openai_auth_key.txt"
 system_audio = "output/system_audio.mp3"
 user_audio = "output/user_audio.mp3"
 feedback_json = "output/feedback.json"
+learnings_json = "output/learnings.json"
 quiz_json = "output/quiz.json"
 conversation_txt = "output/conversation.txt"
 db_file = "database/english_learnings.db"
@@ -237,14 +239,17 @@ class EnglishTutorApp(QWidget):
 
         quiz_header = QHBoxLayout()
         quiz_title = QLabel("<b>Quiz Generator</b>")
-        self.quiz_btn = QPushButton("Generate")
+        self.quiz_btn = QPushButton("Generate from conversation")
         self.quiz_btn.clicked.connect(self.generate_quiz)
+        self.quiz_memory_btn = QPushButton("Generate from memory")
+        self.quiz_memory_btn.clicked.connect(self.generate_memory_quiz)
         self.start_quiz_btn = QPushButton("Start Quiz")
         self.start_quiz_btn.clicked.connect(self.start_quiz)
 
         quiz_header.addWidget(quiz_title)
         quiz_header.addStretch()
         quiz_header.addWidget(self.quiz_btn)
+        quiz_header.addWidget(self.quiz_memory_btn)
         quiz_header.addWidget(self.start_quiz_btn)
 
         self.quiz_display = QTextEdit(readOnly=True)
@@ -305,7 +310,8 @@ class EnglishTutorApp(QWidget):
 
     def play_audio(self):
         self.audio_player = QMediaPlayer()
-        self.audio_player.setMedia(QMediaContent(QUrl.fromLocalFile(system_audio)))
+        self.audio_player.setMedia(QMediaContent(
+            QUrl.fromLocalFile(system_audio)))
         self.audio_player.play()
 
     async def send_and_receive_response(self, user_text):
@@ -439,7 +445,18 @@ class EnglishTutorApp(QWidget):
         self.phrase_remember_btn.setEnabled(False)
 
     def generate_quiz(self):
-        gen_ai_apis.create_quiz()
+        gen_ai_apis.create_quiz(feedback_json)
+
+    def generate_memory_quiz(self):
+        learnings = self.db.get_random_from_tables(
+            ["NewWords", "NewPhrases"], total_limit=10)
+        formatted_json = helper.format_learnings_to_json(learnings)
+        json_object = json.dumps(formatted_json, indent=2)
+        print(json_object)
+        with open(learnings_json, "w") as outfile:
+            outfile.write(json_object)
+
+        gen_ai_apis.create_quiz(learnings_json)
 
     def start_quiz(self):
         try:
