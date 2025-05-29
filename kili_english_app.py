@@ -543,7 +543,7 @@ class EnglishTutorApp(QWidget):
         Generate a quiz from memory (learnings).
         """
         learnings = self.db.get_random_from_tables(
-            ["NewWords", "NewPhrases"], total_limit=10)
+            ["GrammarMistakes", "BetterPhrases", "BetterVocabulary", "NewWords", "NewPhrases"], total_limit=10)
         formatted_json = helper.format_learnings_to_json(learnings)
         json_object = json.dumps(formatted_json, indent=2)
         print(json_object)
@@ -618,7 +618,7 @@ class EnglishTutorApp(QWidget):
         """
         Call the English enhancer to improve the conversation.
         """
-        gen_ai_apis.english_enhancer()
+        gen_ai_apis.improve_english()
 
     def show_conversation_diff(self):
         """

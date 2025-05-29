@@ -38,13 +38,6 @@ def init_openai_client(output_config):
     client = openai.OpenAI(api_key=key)
 
 
-def english_enhancer():
-    """
-    Wrapper for improve_english to be called from UI.
-    """
-    improve_english()
-
-
 def improve_english():
     """
     Improves the user's conversation by rewriting only the "You:" parts
