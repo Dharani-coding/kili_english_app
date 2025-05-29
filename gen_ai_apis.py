@@ -4,6 +4,7 @@ import json
 # Global variables
 client = None
 messages = []
+config = None
 
 # System prompt to guide the assistant
 instruction = """You are a scenario adapter who takes on the given role and assists with practice conversations and 
@@ -12,27 +13,73 @@ vocabulary building. Your responses should be limited to three lines.
 messages.append({"role": "system", "content": instruction})
 
 
-def init_openai_client(auth_key_val, system_audio_val, user_audio_val, feedback_json_val, quiz_json_val, conversation_txt_val):
+def init_openai_client(output_config):
     """
     Initializes the OpenAI client and sets global paths for files.
 
     Parameters:
-        auth_key_val (str): Path to the API key file.
-        system_audio_val (str): Path to save generated system audio.
-        user_audio_val (str): Path to the user audio input.
-        feedback_json_val (str): Path to store feedback JSON.
-        quiz_json_val (str): Path to store generated quiz.
-        conversation_txt_val (str): Path to save ongoing conversation log.
+        output_config (dict): A dictionary containing all needed paths/keys.
     """
-    global auth_key, system_audio, user_audio, feedback_json, quiz_json, conversation_txt
-    auth_key, system_audio, user_audio = auth_key_val, system_audio_val, user_audio_val
-    feedback_json, quiz_json, conversation_txt = feedback_json_val, quiz_json_val, conversation_txt_val
+    global config
+    config = output_config
 
-    with open(auth_key, "r") as key_file:
+    with open(config["auth_key"], "r") as key_file:
         key = key_file.read().strip()
 
     global client
     client = openai.OpenAI(api_key=key)
+
+
+def english_enhancer():
+    """
+    Wrapper for improve_english to be called from UI.
+    """
+    improve_english()
+
+
+def improve_english():
+    """
+    Generates
+    """
+    with open(config["feedback_json"], "r") as file:
+        feedback = json.load(file)
+
+    with open(config["conversation_txt"], "r") as file:
+        conversation = file.read()
+
+    prompt = f"""
+    conversation:
+    {conversation}
+
+
+    Please rewrite only the "You:" parts of the conversation to improve grammar, vocabulary, and phrasing. Maintain a natural tone that matches the context — casual, formal, or friendly as appropriate. Use your judgment to rephrase the responses as a fluent, thoughtful speaker would, going beyond just applying the provided feedback. Ensure the meaning stays the same, but make the delivery more native-like, polished, and engaging.
+
+    Output Format:
+    Return only the updated conversation (including both “You:” and “System:” lines), with only the “You:” lines modified. Do not include explanations or extra text, so I can directly paste it into this PyQt text box:
+
+    self.chat_display = QTextEdit(readOnly=True)
+    
+    Feeback received:
+    {json.dumps(feedback, indent=2)}
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are an English tutor helping the user improve spoken english",
+            },
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.7,
+    )
+
+    data = response.choices[0].message.content
+
+    # Save to txt
+    with open(config["improv_conversation_txt"], "w") as outfile:
+        outfile.write(data)
 
 
 def create_quiz(json_file):
@@ -118,10 +165,13 @@ def create_quiz(json_file):
     response = client.chat.completions.create(
         model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are an English tutor helping the user correct grammar mistakes."},
-            {"role": "user", "content": prompt}
+            {
+                "role": "system",
+                "content": "You are an English tutor helping the user correct grammar mistakes.",
+            },
+            {"role": "user", "content": prompt},
         ],
-        temperature=0.7
+        temperature=0.7,
     )
 
     quiz_content = response.choices[0].message.content
@@ -135,15 +185,13 @@ def create_quiz(json_file):
         elif line.strip().startswith("A:"):
             answer = line.strip()[2:].strip()
             if question and answer:
-                quiz_qa_pairs.append({
-                    "question": question,
-                    "answer": answer
-                })
+                quiz_qa_pairs.append({"question": question, "answer": answer})
             question, answer = "", ""
 
     # Save to JSON
-    with open(quiz_json, "w") as outfile:
+    with open(config["quiz_json"], "w") as outfile:
         json.dump(quiz_qa_pairs, outfile, indent=4)
+
 
 def conversation_corrector(fix_json=False, invalid_json=None):
     """
@@ -159,7 +207,7 @@ def conversation_corrector(fix_json=False, invalid_json=None):
         Ensure the output is a **valid JSON object** with no markdown, extra text, or formatting.
         """
     else:
-        with open(conversation_txt, "r") as txt_file:
+        with open(config["conversation_txt"], "r") as txt_file:
             conv = txt_file.read()
 
         prompt = f"""
@@ -185,9 +233,7 @@ def conversation_corrector(fix_json=False, invalid_json=None):
         """
 
     response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.4
+        model="gpt-4o", messages=[{"role": "user", "content": prompt}], temperature=0.4
     )
 
     result_text = response.choices[0].message.content
@@ -195,7 +241,7 @@ def conversation_corrector(fix_json=False, invalid_json=None):
     try:
         result_json = json.loads(result_text)
         json_object = json.dumps(result_json, indent=2)
-        with open(feedback_json, "w") as outfile:
+        with open(config["feedback_json"], "w") as outfile:
             outfile.write(json_object)
     except json.JSONDecodeError:
         print("The model didn't return valid JSON.")
@@ -215,15 +261,12 @@ def conversation_builder(user_input):
     global messages
     messages.append({"role": "user", "content": "You: " + user_input})
 
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=messages
-    )
+    response = client.chat.completions.create(model="gpt-4", messages=messages)
 
     reply = response.choices[0].message.content.strip()
     messages.append({"role": "assistant", "content": reply})
 
-    with open(conversation_txt, "a") as f:
+    with open(config["conversation_txt"], "a") as f:
         f.write(f"You: {user_input}\nSystem: {reply}\n")
 
     return reply
@@ -236,10 +279,9 @@ def speech_to_text():
     Returns:
         str: Transcribed text.
     """
-    with open(user_audio, "rb") as audio_file:
+    with open(config["user_audio"], "rb") as audio_file:
         transcription = client.audio.transcriptions.create(
-            model="gpt-4o-transcribe",
-            file=audio_file
+            model="gpt-4o-transcribe", file=audio_file
         )
     return transcription.text
 
@@ -252,12 +294,10 @@ def text_to_speech(input_text):
         input_text (str): The text to convert to speech.
     """
     response = client.audio.speech.create(
-        model="tts-1",
-        voice="alloy",
-        input=input_text
+        model="tts-1", voice="alloy", input=input_text
     )
 
-    with open(system_audio, "wb") as f:
+    with open(config["system_audio"], "wb") as f:
         f.write(response.content)
 
 
@@ -267,4 +307,20 @@ def delete_chat_history():
     """
     global messages
     messages = messages[:1]  # Keep only the system instruction
-    open(conversation_txt, "w").close()
+    open(config["conversation_txt"], "w").close()
+
+
+if __name__ == "__main__":
+    # Example usage
+    config = {
+        "auth_key": "openai_auth_key.txt",
+        "conversation_txt": "output/conversation.txt",
+        "feedback_json": "output/feedback.json",
+        "quiz_json": "output/quiz.json",
+        "user_audio": "output/user_audio.wav",
+        "system_audio": "output/system_audio.wav",
+        "improv_conversation_txt": "output/improved_conversation.txt",
+    }
+    init_openai_client(config)
+    # Add more function calls as needed for testing
+    english_enhancer()

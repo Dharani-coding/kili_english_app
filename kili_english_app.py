@@ -37,6 +37,7 @@ feedback_json = "output/feedback.json"
 learnings_json = "output/learnings.json"
 quiz_json = "output/quiz.json"
 conversation_txt = "output/conversation.txt"
+improv_conversation_txt = "output/improv_conversation.txt"
 db_file = "database/english_learnings.db"
 
 
@@ -274,10 +275,55 @@ class EnglishTutorApp(QWidget):
         quiz_layout.addLayout(nav_layout)
         quiz_tab.setLayout(quiz_layout)
 
-        # Add tabs
+        # === Tab 4: English Enhancer ===
+        enhancer_tab = QWidget()
+        enhancer_layout = QVBoxLayout()
+
+        # Top buttons
+        enhancer_btn_layout = QHBoxLayout()
+        self.improve_btn = QPushButton("Improve conversation")
+        self.improve_btn.clicked.connect(self.improve_conversation)
+        self.show_diff_btn = QPushButton("Show diff")
+        self.show_diff_btn.clicked.connect(self.show_conversation_diff)
+        self.clear_enhancer_btn = QPushButton("Clear")
+        self.clear_enhancer_btn.clicked.connect(self.clear_enhancer_texts)
+        enhancer_btn_layout.addWidget(self.improve_btn)
+        enhancer_btn_layout.addWidget(self.show_diff_btn)
+        enhancer_btn_layout.addWidget(self.clear_enhancer_btn)
+        enhancer_layout.addLayout(enhancer_btn_layout)
+
+        # Conversation and Improved Conversation text boxes
+        enhancer_texts_layout = QHBoxLayout()
+
+        conv_layout = QVBoxLayout()
+        conv_label = QLabel("Conversation")
+        self.conv_text = QTextEdit(readOnly=True)
+        conv_layout.addWidget(conv_label)
+        conv_layout.addWidget(self.conv_text)
+        self.conv_text.setStyleSheet(
+            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
+        )
+
+        improved_layout = QVBoxLayout()
+        improved_label = QLabel("Improved Conversation")
+        self.improved_text = QTextEdit(readOnly=True)
+        improved_layout.addWidget(improved_label)
+        improved_layout.addWidget(self.improved_text)
+        self.improved_text.setStyleSheet(
+            "font-size: 16px; background-color: #e6fff2; border: 2px solid #5cb85c; border-radius: 10px; padding: 10px;"
+        )
+
+        enhancer_texts_layout.addLayout(conv_layout)
+        enhancer_texts_layout.addLayout(improved_layout)
+        enhancer_layout.addLayout(enhancer_texts_layout)
+
+        enhancer_tab.setLayout(enhancer_layout)
+
+        # Add all tabs
         tab_widget.addTab(chat_tab, "🗨️ Chat")
         tab_widget.addTab(report_tab, "📄 Report")
         tab_widget.addTab(quiz_tab, "🧠 Quiz")
+        tab_widget.addTab(enhancer_tab, "✨ English Enhancer")
 
         main_layout.addWidget(tab_widget)
         self.setLayout(main_layout)
@@ -508,6 +554,33 @@ class EnglishTutorApp(QWidget):
         self.next_btn.setEnabled(True)
         self.show_flashcard()
 
+    def improve_conversation(self):
+        # Calls english_enhancer in gen_ai_apis
+        gen_ai_apis.english_enhancer()
+
+    def show_conversation_diff(self):
+        # Loads conversation_txt and improv_conversation_txt and populates text boxes
+        with open(conversation_txt, "r") as f:
+            conv = f.read()
+        with open(improv_conversation_txt, "r") as f:
+            improved = f.read()
+
+        # Add newlines between "You:" and "System:" lines for readability
+        def parse_conversation(text):
+            import re
+            # Add a newline before each "You:" or "System:" except the first line
+            content = re.sub(r'(You:|System:)', r'\n\1', text).strip()
+            content = content.replace('You:', '👩🏽:')
+            content = content.replace('System:', '🤖:')
+            return content
+
+        self.conv_text.setPlainText(parse_conversation(conv))
+        self.improved_text.setPlainText(parse_conversation(improved))
+
+    def clear_enhancer_texts(self):
+        self.conv_text.clear()
+        self.improved_text.clear()
+
 
 # Run app with qasync event loop
 if __name__ == "__main__":
@@ -519,9 +592,16 @@ if __name__ == "__main__":
     window = EnglishTutorApp()
     window.resize(600, 700)
     window.show()
-    gen_ai_apis.init_openai_client(
-        auth_key, system_audio, user_audio, feedback_json, quiz_json, conversation_txt
-    )
+    openai_config = {
+        "auth_key": auth_key,
+        "system_audio": system_audio,
+        "user_audio": user_audio,
+        "feedback_json": feedback_json,
+        "quiz_json": quiz_json,
+        "conversation_txt": conversation_txt,
+        "improv_conversation_txt": improv_conversation_txt,
+    }
+    gen_ai_apis.init_openai_client(openai_config)
 
     with loop:
         loop.run_forever()
