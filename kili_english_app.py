@@ -1,3 +1,8 @@
+"""
+Kili - English Learning App (PyQt5)
+Main application UI and logic for chat, reports, quizzes, and English enhancement.
+"""
+
 import sys
 import asyncio
 import sounddevice as sd
@@ -41,8 +46,10 @@ improv_conversation_txt = "output/improv_conversation.txt"
 db_file = "database/english_learnings.db"
 
 
-# Recording Thread
 class RecorderThread(QThread):
+    """
+    Thread for recording audio from the microphone.
+    """
     finished = pyqtSignal()
 
     def __init__(self, samplerate=44100):
@@ -68,6 +75,9 @@ class RecorderThread(QThread):
         self.running = False
 
     def save_to_mp3(self):
+        """
+        Save the recorded audio to an MP3 file.
+        """
         audio = np.concatenate(self.recording, axis=0)
         temp_wav = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
         temp_wav.close()
@@ -78,8 +88,10 @@ class RecorderThread(QThread):
         return user_audio
 
 
-# Main Application
 class EnglishTutorApp(QWidget):
+    """
+    Main application window for the Kili English Learning App.
+    """
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Kili - English Learning App")
@@ -92,6 +104,9 @@ class EnglishTutorApp(QWidget):
         self.db = database_manager.DBManager(db_file)
 
     def init_ui(self):
+        """
+        Initialize the UI with all tabs and widgets.
+        """
         main_layout = QVBoxLayout()
         tab_widget = QTabWidget()
 
@@ -116,9 +131,6 @@ class EnglishTutorApp(QWidget):
         chat_layout.addLayout(toggle_layout)
 
         self.chat_display = QTextEdit(readOnly=True)
-        self.chat_display.setStyleSheet(
-            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
-        )
         chat_layout.addWidget(self.chat_display)
 
         # Chat buttons
@@ -181,9 +193,6 @@ class EnglishTutorApp(QWidget):
         grammar_layout = QHBoxLayout()
         grammar_label = QLabel("📝 Grammar")
         self.grammar_text = QTextEdit(readOnly=True)
-        self.grammar_text.setStyleSheet(
-            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
-        )
         self.grammar_remember_btn = QPushButton("Remember Grammar")
         self.grammar_remember_btn.clicked.connect(self.remember_grammar)
 
@@ -195,9 +204,6 @@ class EnglishTutorApp(QWidget):
         vocab_layout = QHBoxLayout()
         vocab_label = QLabel("📚 Vocabulary")
         self.vocab_text = QTextEdit(readOnly=True)
-        self.vocab_text.setStyleSheet(
-            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
-        )
         self.vocab_remember_btn = QPushButton("Remember Vocabulary")
         self.vocab_remember_btn.clicked.connect(self.remember_vocabulary)
 
@@ -209,9 +215,6 @@ class EnglishTutorApp(QWidget):
         phrase_layout = QHBoxLayout()
         phrase_label = QLabel("💬 Phrases")
         self.phrase_text = QTextEdit(readOnly=True)
-        self.phrase_text.setStyleSheet(
-            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
-        )
         self.phrase_remember_btn = QPushButton("Remember Phrases")
         self.phrase_remember_btn.clicked.connect(self.remember_phrases)
 
@@ -254,9 +257,6 @@ class EnglishTutorApp(QWidget):
         quiz_header.addWidget(self.start_quiz_btn)
 
         self.quiz_display = QTextEdit(readOnly=True)
-        self.quiz_display.setStyleSheet(
-            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
-        )
 
         nav_layout = QHBoxLayout()
         self.prev_btn = QPushButton("Previous")
@@ -300,18 +300,12 @@ class EnglishTutorApp(QWidget):
         self.conv_text = QTextEdit(readOnly=True)
         conv_layout.addWidget(conv_label)
         conv_layout.addWidget(self.conv_text)
-        self.conv_text.setStyleSheet(
-            "font-size: 16px; background-color: #fffbe6; border: 2px solid #f0ad4e; border-radius: 10px; padding: 10px;"
-        )
 
         improved_layout = QVBoxLayout()
         improved_label = QLabel("Improved Conversation")
         self.improved_text = QTextEdit(readOnly=True)
         improved_layout.addWidget(improved_label)
         improved_layout.addWidget(self.improved_text)
-        self.improved_text.setStyleSheet(
-            "font-size: 16px; background-color: #e6fff2; border: 2px solid #5cb85c; border-radius: 10px; padding: 10px;"
-        )
 
         enhancer_texts_layout.addLayout(conv_layout)
         enhancer_texts_layout.addLayout(improved_layout)
@@ -329,6 +323,9 @@ class EnglishTutorApp(QWidget):
         self.setLayout(main_layout)
 
     def toggle_recording(self, checked):
+        """
+        Start or stop audio recording.
+        """
         self.record_btn.setText("Stop" if checked else "Record")
         if checked:
             self.start_recording()
@@ -336,6 +333,9 @@ class EnglishTutorApp(QWidget):
             self.stop_recording()
 
     def start_recording(self):
+        """
+        Start the audio recording thread.
+        """
         print("[System] Recording started...")
         self.recorder_thread = RecorderThread()
         self.recorder_thread.finished.connect(
@@ -344,10 +344,16 @@ class EnglishTutorApp(QWidget):
         self.recorder_thread.start()
 
     def stop_recording(self):
+        """
+        Stop the audio recording thread.
+        """
         if self.recorder_thread:
             self.recorder_thread.stop()
 
     def del_audio(self):
+        """
+        Delete the current audio player instance.
+        """
         if hasattr(self, "audio_player"):
             self.audio_player.stop()
             self.audio_player.setMedia(QMediaContent())
@@ -355,12 +361,18 @@ class EnglishTutorApp(QWidget):
             del self.audio_player
 
     def play_audio(self):
+        """
+        Play the system audio file.
+        """
         self.audio_player = QMediaPlayer()
         self.audio_player.setMedia(QMediaContent(
             QUrl.fromLocalFile(system_audio)))
         self.audio_player.play()
 
     async def send_and_receive_response(self, user_text):
+        """
+        Send user text to the AI and display the response.
+        """
         self.del_audio()
         self.display_message(user_text, "You")
 
@@ -374,25 +386,40 @@ class EnglishTutorApp(QWidget):
         self.display_message(system_reply, "System")
 
     async def on_recording_finished(self):
+        """
+        Handle actions after audio recording is finished.
+        """
         path = await asyncio.to_thread(self.recorder_thread.save_to_mp3)
         print(f"[System] Audio saved to: {path}")
         user_text = await asyncio.to_thread(gen_ai_apis.speech_to_text)
         await self.send_and_receive_response(user_text)
 
     def display_message(self, text=None, sender="You"):
+        """
+        Display a message in the chat display.
+        """
         if text.strip():
             sender = "🤖" if sender == "System" else "👩🏽"
             self.chat_display.append(f"{sender}: {text}\n")
         self.msg_input.clear()
 
     async def send_text_message(self):
+        """
+        Send the text message from the input box.
+        """
         user_text = self.msg_input.text()
         await self.send_and_receive_response(user_text)
 
     def get_report(self):
+        """
+        Generate a conversation report.
+        """
         gen_ai_apis.conversation_corrector()
 
     def show_feedback(self):
+        """
+        Display feedback from the feedback JSON.
+        """
         global feedback
         with open(feedback_json, "r") as file:
             feedback = json.load(file)
@@ -428,6 +455,9 @@ class EnglishTutorApp(QWidget):
         self.phrase_remember_btn.setEnabled(True)
 
     def remember_grammar(self):
+        """
+        Store grammar mistakes to the database.
+        """
         try:
             for mistake, correction in feedback.get("grammar_mistakes", {}).items():
                 self.db.add_grammar_mistake(mistake, correction)
@@ -436,6 +466,9 @@ class EnglishTutorApp(QWidget):
             print("Error remembering grammar:", e)
 
     def remember_vocabulary(self):
+        """
+        Store vocabulary improvements to the database.
+        """
         try:
             for word, suggestion in feedback.get("better_vocabulary", {}).items():
                 self.db.add_better_vocabulary(word, suggestion)
@@ -444,6 +477,9 @@ class EnglishTutorApp(QWidget):
             print("Error remembering vocabulary:", e)
 
     def remember_phrases(self):
+        """
+        Store better phrases to the database.
+        """
         try:
             for phrase, improved in feedback.get("better_phrases", {}).items():
                 self.db.add_better_phrase(phrase, improved)
@@ -452,6 +488,9 @@ class EnglishTutorApp(QWidget):
             print("Error remembering phrases:", e)
 
     def remember_input(self):
+        """
+        Store a new word or phrase to the database from user input.
+        """
         text = self.memory_input.text().strip()
         category = self.memory_dropdown.currentText()
 
@@ -481,6 +520,9 @@ class EnglishTutorApp(QWidget):
             )
 
     def clear_report(self):
+        """
+        Clear the report and feedback UI.
+        """
         global feedback
         feedback = None
         self.grammar_text.clear()
@@ -491,9 +533,15 @@ class EnglishTutorApp(QWidget):
         self.phrase_remember_btn.setEnabled(False)
 
     def generate_quiz(self):
+        """
+        Generate a quiz from feedback.
+        """
         gen_ai_apis.create_quiz(feedback_json)
 
     def generate_memory_quiz(self):
+        """
+        Generate a quiz from memory (learnings).
+        """
         learnings = self.db.get_random_from_tables(
             ["NewWords", "NewPhrases"], total_limit=10)
         formatted_json = helper.format_learnings_to_json(learnings)
@@ -505,6 +553,9 @@ class EnglishTutorApp(QWidget):
         gen_ai_apis.create_quiz(learnings_json)
 
     def start_quiz(self):
+        """
+        Start the quiz and show the first flashcard.
+        """
         try:
             with open(quiz_json, "r") as infile:
                 self.qa_pairs = json.load(infile)
@@ -522,6 +573,9 @@ class EnglishTutorApp(QWidget):
         self.show_flashcard()
 
     def show_flashcard(self):
+        """
+        Show the current flashcard (question/answer).
+        """
         q = self.qa_pairs[self.current_index]["question"]
         a = self.qa_pairs[self.current_index]["answer"]
         if self.showing_question:
@@ -532,6 +586,9 @@ class EnglishTutorApp(QWidget):
             )
 
     def next_flashcard(self):
+        """
+        Show the next flashcard or answer.
+        """
         if self.showing_question:
             self.showing_question = False
         else:
@@ -547,6 +604,9 @@ class EnglishTutorApp(QWidget):
         self.show_flashcard()
 
     def prev_flashcard(self):
+        """
+        Show the previous flashcard.
+        """
         if self.showing_question:
             self.current_index = max(0, self.current_index - 1)
         self.showing_question = True
@@ -555,29 +615,28 @@ class EnglishTutorApp(QWidget):
         self.show_flashcard()
 
     def improve_conversation(self):
-        # Calls english_enhancer in gen_ai_apis
+        """
+        Call the English enhancer to improve the conversation.
+        """
         gen_ai_apis.english_enhancer()
 
     def show_conversation_diff(self):
-        # Loads conversation_txt and improv_conversation_txt and populates text boxes
+        """
+        Load and display the original and improved conversation.
+        """
         with open(conversation_txt, "r") as f:
             conv = f.read()
         with open(improv_conversation_txt, "r") as f:
             improved = f.read()
 
-        # Add newlines between "You:" and "System:" lines for readability
-        def parse_conversation(text):
-            import re
-            # Add a newline before each "You:" or "System:" except the first line
-            content = re.sub(r'(You:|System:)', r'\n\1', text).strip()
-            content = content.replace('You:', '👩🏽:')
-            content = content.replace('System:', '🤖:')
-            return content
-
-        self.conv_text.setPlainText(parse_conversation(conv))
-        self.improved_text.setPlainText(parse_conversation(improved))
+        # Use helper to format for display
+        self.conv_text.setPlainText(helper.parse_conversation_for_display(conv))
+        self.improved_text.setPlainText(helper.parse_conversation_for_display(improved))
 
     def clear_enhancer_texts(self):
+        """
+        Clear the enhancer text boxes.
+        """
         self.conv_text.clear()
         self.improved_text.clear()
 
@@ -586,11 +645,80 @@ class EnglishTutorApp(QWidget):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon("images/kili_logo.png"))
+    app.setApplicationName("Kili - English Learning App")
+    app.setStyleSheet("""
+        QWidget {
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            font-size: 15px;
+            background-color: #f9fafb;
+            color: #333;
+        }
+        QTabWidget::pane {
+            border: none;
+            background: transparent;
+            padding: 8px;
+        }
+        QTabBar::tab {
+            background: #e2e8f0;
+            border: none;
+            border-top-left-radius: 10px;
+            border-top-right-radius: 10px;
+            padding: 8px 20px;
+            margin-right: 4px;
+            color: #334155;
+        }
+        QTabBar::tab:selected {
+            background: #ffffff;
+            font-weight: 600;
+            color: #1e3a8a;
+            border-bottom: 2px solid #1e3a8a;
+        }
+        QTabBar::tab:hover {
+            background: #f1f5f9;
+        }
+        QTextEdit, QLineEdit {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 15px;
+        }
+        QPushButton {
+            background-color: #14b8a6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-weight: 500;
+        }
+        QPushButton:hover {
+            background-color: #0d9488;
+        }
+        QPushButton:pressed {
+            background-color: #0f766e;
+        }
+        QComboBox {
+            background-color: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 6px 12px;
+        }
+        QScrollBar:vertical, QScrollBar:horizontal {
+            background: #f1f5f9;
+            border: none;
+            width: 10px;
+        }
+        QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+            background: #cbd5e1;
+            border-radius: 5px;
+        }
+    """)
+
     loop = QEventLoop(app)
     asyncio.set_event_loop(loop)
 
     window = EnglishTutorApp()
-    window.resize(600, 700)
+    window.resize(800, 800)
     window.show()
     openai_config = {
         "auth_key": auth_key,

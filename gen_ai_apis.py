@@ -1,3 +1,10 @@
+"""
+AI API integration for Kili English Learning App.
+
+Handles OpenAI client initialization, conversation management, feedback analysis,
+quiz generation, speech-to-text, text-to-speech, and chat history operations.
+"""
+
 import openai
 import json
 
@@ -7,18 +14,19 @@ messages = []
 config = None
 
 # System prompt to guide the assistant
-instruction = """You are a scenario adapter who takes on the given role and assists with practice conversations and 
-vocabulary building. Your responses should be limited to three lines.
-"""
+instruction = (
+    "You are a scenario adapter who takes on the given role and assists with practice conversations and "
+    "vocabulary building. Your responses should be limited to three lines."
+)
 messages.append({"role": "system", "content": instruction})
 
 
 def init_openai_client(output_config):
     """
-    Initializes the OpenAI client and sets global paths for files.
+    Initializes the OpenAI client and sets global config.
 
-    Parameters:
-        output_config (dict): A dictionary containing all needed paths/keys.
+    Args:
+        output_config (dict): Dictionary containing all needed paths/keys.
     """
     global config
     config = output_config
@@ -39,7 +47,8 @@ def english_enhancer():
 
 def improve_english():
     """
-    Generates
+    Improves the user's conversation by rewriting only the "You:" parts
+    to enhance grammar, vocabulary, and phrasing. Saves the improved conversation.
     """
     with open(config["feedback_json"], "r") as file:
         feedback = json.load(file)
@@ -50,7 +59,6 @@ def improve_english():
     prompt = f"""
     conversation:
     {conversation}
-
 
     Please rewrite only the "You:" parts of the conversation to improve grammar, vocabulary, and phrasing. Maintain a natural tone that matches the context — casual, formal, or friendly as appropriate. Use your judgment to rephrase the responses as a fluent, thoughtful speaker would, going beyond just applying the provided feedback. Ensure the meaning stays the same, but make the delivery more native-like, polished, and engaging.
 
@@ -85,6 +93,9 @@ def improve_english():
 def create_quiz(json_file):
     """
     Generates a short grammar and phrasing quiz from feedback JSON content and saves it to a file.
+
+    Args:
+        json_file (str): Path to the JSON file containing feedback or learnings.
     """
     with open(json_file, "r") as file:
         data = json.load(file)
@@ -147,19 +158,19 @@ def create_quiz(json_file):
     Now generate quiz questions per item in each section using the structure above.
 
     Grammar Mistakes:
-    {"\n".join(data["grammar_mistakes"])}
+    {"\n".join(data.get("grammar_mistakes", {}))}
 
     Corrected Phrases:
-    {"\n".join(data["better_phrases"])}
+    {"\n".join(data.get("better_phrases", {}))}
 
     Better vocabulary:
-    {"\n".join(data["better_vocabulary"])}
+    {"\n".join(data.get("better_vocabulary", {}))}
 
     New words learnt:
-    {"\n".join(data.get("new_words", {}))}
+    {"\n".join(data.get("new_words", []))}
 
     New phrases learnt:
-    {"\n".join(data.get("new_phrases", {}))}
+    {"\n".join(data.get("new_phrases", []))}
     """
 
     response = client.chat.completions.create(
@@ -197,7 +208,7 @@ def conversation_corrector(fix_json=False, invalid_json=None):
     """
     Analyzes the user's conversation for grammar issues and provides suggestions.
 
-    Parameters:
+    Args:
         fix_json (bool): Whether to fix a broken JSON response.
         invalid_json (str): The invalid JSON text to attempt to correct.
     """
@@ -252,7 +263,7 @@ def conversation_builder(user_input):
     """
     Adds user input to the conversation, gets the assistant's response, appends both to log and returns the reply.
 
-    Parameters:
+    Args:
         user_input (str): The user's message.
 
     Returns:
@@ -290,7 +301,7 @@ def text_to_speech(input_text):
     """
     Converts input text to speech and saves the audio output.
 
-    Parameters:
+    Args:
         input_text (str): The text to convert to speech.
     """
     response = client.audio.speech.create(
